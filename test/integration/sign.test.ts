@@ -56,7 +56,7 @@ describe('ISL translation pipeline', () => {
     expect(result.segments[2].assets[0].url).toMatch(/\/api\/v1\/assets\/ast_.+\/content\?exp=\d+&sig=[0-9a-f]+/);
     expect(result.segments[0].timing).toEqual({ startMs: 0, durationMs: 900 });
     expect(result.segments[1].timing.startMs).toBe(900);
-    expect(result.missing).toEqual([{ index: 3, status: 'unsupported', sourceSpan: { start: 20, end: 25 }, reason: 'unsupported_by_engine' }]);
+    expect(result.missing).toEqual([{ index: 3, status: 'unsupported', sourceSpan: { start: 20, end: 25 }, reason: 'no_approved_sign' }]);
     expect(result.notices).toContain('segmentation_is_illustrative_not_isl_grammar');
     expect(result.quality.renderable).toBe(false);
     expect(result.segments.every((s: { nonManualMarkers: unknown[] }) => s.nonManualMarkers.length === 0)).toBe(true);

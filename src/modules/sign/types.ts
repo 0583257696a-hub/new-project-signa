@@ -69,9 +69,12 @@ export interface NormalizedSegment {
   kind: ProposedSegment['kind'];
   status: SegmentStatus;
   gloss: string | null;
-  signEntry: { id: string; code: string; label: string | null } | null;
+  signEntry: { id: string; code: string; label: string | null; conceptKey: string | null } | null;
   assets: { id: string; mimeType: string; durationMs: number | null; url: string | null }[];
   timing: { startMs: number; durationMs: number };
+  /** Lexical non-manual markers that are part of the approved sign itself (from the dictionary). */
+  lexicalNonManualMarkers: NonManualMarker[];
+  /** Sentence-level (grammatical) markers proposed by the engine — only from a validated engine. */
   nonManualMarkers: NonManualMarker[];
   sourceSpan: SourceSpan | null;
   renderable: boolean;
@@ -86,13 +89,18 @@ export interface NormalizedSignResult {
   verificationStatus: VerificationStatus;
   segments: NormalizedSegment[];
   missing: { index: number; status: SegmentStatus; sourceSpan: SourceSpan | null; reason: string }[];
+  /** Always false: Signa does not store the source text with the result. */
+  sourceTextStored: false;
   quality: {
     segmentsTotal: number;
     verifiedSegments: number;
     fingerspelledSegments: number;
     unsupportedSegments: number;
-    /** Share of the source text covered by renderable, approved signs (0..1). */
-    coverage: number;
+    /**
+     * LEXICAL coverage: share of source letters inside segments rendered with approved signs (0..1).
+     * This is NOT a measure of linguistic correctness or translation quality.
+     */
+    lexicalCoverage: number;
     renderable: boolean;
     totalDurationMs: number;
   };

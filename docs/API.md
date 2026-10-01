@@ -115,7 +115,7 @@ The rule-based engine matches a curated lexicon (Hebrew prefixes and suffixes, E
 | POST | `/sign/jobs/:jobId/cancel` | Queued or processing jobs only |
 
 Job statuses: `queued, processing, completed, partially_completed, failed, cancelled, expired`.
-Result: see [ISL-PIPELINE.md](ISL-PIPELINE.md#result-format). UI mapping: `verificationStatus` → badge (Verified / Partially verified / Experimental / Unsupported); `segments[].status` → `verified_sign` ("covered by reviewed signs"), `fingerspelled`, `unknown_sign` / `missing_asset` / `unsupported` (not renderable); `segments[].sourceSpan` highlights the source text.
+Result: see [ISL-PIPELINE.md](ISL-PIPELINE.md#result-format). Show `quality.lexicalCoverage` as dictionary coverage, never as accuracy. UI mapping: `verificationStatus` → badge (Verified / Partially verified / Experimental / Unsupported); `segments[].status` → `verified_sign` ("covered by reviewed signs"), `fingerspelled`, `unknown_sign` / `missing_asset` / `unsupported` (not renderable); `segments[].sourceSpan` highlights the source text.
 
 ## Saved history (opt-in)
 | Method | Path | Notes |
@@ -171,7 +171,9 @@ Non-members get `404` for every organization resource.
 | GET | `/admin/feature-flags` · PUT `/admin/feature-flags/:key` | support · admin |
 | GET | `/admin/audit-events?action=&actorUserId=&outcome=&from=&to=` | admin |
 | GET | `/admin/jobs/stats?days=` · `/admin/engine/health` | support |
-| GET/POST/PATCH | `/admin/dictionary/entries[...]` (create, edit, review, license, publish, unpublish, revisions) | admin |
+| GET/POST/PATCH | `/admin/dictionary/entries[...]` (create, edit, review, license, publish, unpublish, revisions; `?conceptKey=` filter) | admin |
+| GET/POST/PATCH | `/admin/dictionary/concepts[/:key]` (`?category=&status=&coverage=missing\|covered`) | admin |
+| GET | `/admin/dictionary/coverage` (lexical coverage per category) | admin |
 | POST | `/admin/dictionary/versions` | admin |
 | POST | `/admin/dictionary/entries/:id/assets` → upload grant | admin |
 | PUT | `/admin/dictionary/assets/:assetId/upload` (`X-Upload-Token`, raw body) | admin |

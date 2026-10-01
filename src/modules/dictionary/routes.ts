@@ -16,10 +16,20 @@ export interface SignEntryRow {
   canonical_label: string;
   label_he: string | null;
   label_en: string | null;
-  description: string | null;
+  concept_key: string | null;
+  hebrew_terms_json: string;
+  english_terms_json: string;
+  sense_description: string | null;
+  part_of_speech: string | null;
+  grammatical_features_json: string;
+  regional_variants_json: string;
+  sign_definition: string | null;
+  non_manual_markers_json: string;
+  dominant_hand: string | null;
+  source_reference: string | null;
+  license_ref: string | null;
+  is_default_variant: number;
   locale: string;
-  variants_json: string;
-  grammar_json: string;
   validation_status: 'draft' | 'in_review' | 'needs_expert' | 'approved' | 'rejected';
   license_status: 'pending' | 'needs_source' | 'confirmed' | 'rejected';
   reviewer_ref: string | null;
@@ -53,12 +63,22 @@ export interface AssetRow {
 const publicEntryView = (e: SignEntryRow) => ({
   id: e.id,
   code: e.sign_code,
+  conceptKey: e.concept_key,
   gloss: e.canonical_label,
   label: { he: e.label_he, en: e.label_en },
-  description: e.description,
+  hebrewTerms: parseJson<string[]>(e.hebrew_terms_json, []),
+  englishTerms: parseJson<string[]>(e.english_terms_json, []),
+  senseDescription: e.sense_description,
+  partOfSpeech: e.part_of_speech,
+  grammaticalFeatures: parseJson(e.grammatical_features_json, {}),
+  regionalVariants: parseJson(e.regional_variants_json, []),
+  signDefinition: e.sign_definition,
+  nonManualMarkers: parseJson(e.non_manual_markers_json, []),
+  dominantHand: e.dominant_hand,
+  isDefaultVariant: e.is_default_variant === 1,
+  sourceReference: e.source_reference,
+  licenseRef: e.license_ref,
   locale: e.locale,
-  variants: parseJson<string[]>(e.variants_json, []),
-  grammar: parseJson(e.grammar_json, {}),
   version: e.version,
   verification: 'expert_approved' as const,
   updatedAt: iso(e.updated_at),
@@ -111,7 +131,8 @@ dictionaryRoutes.get('/entries', async (c) => {
   const rows = await all<SignEntryRow>(
     svc.db,
     `SELECT * FROM sign_entries WHERE publication_status = 'published'
-        AND (?1 IS NULL OR instr(lower(canonical_label), lower(?1)) > 0 OR instr(label_he, ?1) > 0 OR instr(lower(label_en), lower(?1)) > 0)
+        AND (?1 IS NULL OR instr(lower(canonical_label), lower(?1)) > 0 OR instr(label_he, ?1) > 0 OR instr(hebrew_terms_json, ?1) > 0
+             OR instr(lower(label_en), lower(?1)) > 0 OR instr(lower(english_terms_json), lower(?1)) > 0)
       ORDER BY sign_code LIMIT ?2 OFFSET ?3`,
     q.q || null, q.limit + 1, q.cursor,
   );
@@ -192,17 +213,82 @@ assetContentRoutes.get('/:assetId/content', async (c) => {
 export const adminDictionaryRoutes = new Hono<AppEnv>();
 adminDictionaryRoutes.use('*', requirePlatformRole('admin'));
 
+const NonManualMarkerSchema = z
+  .object({
+    type: z.enum(['facial_expression', 'eyebrows', 'eye_gaze', 'head_movement', 'mouthing', 'body_shift', 'other']),
+    value: z.string().trim().min(1).max(100),
+  })
+  .strict();
+
+const Terms = z.array(z.string().trim().min(1).max(100)).max(30);
+
 const EntryFields = z
   .object({
     canonicalLabel: z.string().trim().min(1).max(100).regex(/^[A-Z0-9][A-Z0-9_\-:]*$/u, 'gloss_format'),
+    conceptKey: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/).nullable(),
     labelHe: z.string().trim().max(100).nullable(),
     labelEn: z.string().trim().max(100).nullable(),
-    description: z.string().trim().max(2000).nullable(),
+    hebrewTerms: Terms,
+    englishTerms: Terms,
+    senseDescription: z.string().trim().max(2000).nullable(),
+    partOfSpeech: z.enum(['noun', 'verb', 'adjective', 'adverb', 'pronoun', 'question', 'numeral', 'classifier', 'greeting', 'particle', 'other']).nullable(),
+    grammaticalFeatures: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])),
+    regionalVariants: z
+      .array(z.object({ community: z.string().trim().min(1).max(100), description: z.string().trim().max(500), signEntryId: z.string().max(40).optional() }).strict())
+      .max(20),
+    signDefinition: z.string().trim().max(2000).nullable(),
+    nonManualMarkers: z.array(NonManualMarkerSchema).max(16),
+    dominantHand: z.enum(['one_handed', 'two_handed_symmetric', 'two_handed_asymmetric', 'not_applicable']).nullable(),
+    isDefaultVariant: z.boolean(),
+    sourceReference: z.string().trim().max(500).nullable(),
+    licenseRef: z.string().trim().max(200).nullable(),
     locale: z.string().max(10),
-    variants: z.array(z.string().trim().min(1).max(100)).max(20),
-    grammar: z.record(z.string().max(40), z.union([z.string().max(200), z.number(), z.boolean()])),
   })
   .partial();
+
+type EntryInput = z.infer<typeof EntryFields>;
+
+/**
+ * API field → column. `linguistic` fields define the sign's form or meaning: changing them on
+ * an approved entry sends it back to review. Changing `licenseRef` resets licence confirmation.
+ */
+const ENTRY_FIELDS: Record<keyof EntryInput, { column: string; kind: 'text' | 'json' | 'bool'; linguistic: boolean }> = {
+  canonicalLabel: { column: 'canonical_label', kind: 'text', linguistic: true },
+  conceptKey: { column: 'concept_key', kind: 'text', linguistic: true },
+  labelHe: { column: 'label_he', kind: 'text', linguistic: true },
+  labelEn: { column: 'label_en', kind: 'text', linguistic: false },
+  hebrewTerms: { column: 'hebrew_terms_json', kind: 'json', linguistic: true },
+  englishTerms: { column: 'english_terms_json', kind: 'json', linguistic: false },
+  senseDescription: { column: 'sense_description', kind: 'text', linguistic: true },
+  partOfSpeech: { column: 'part_of_speech', kind: 'text', linguistic: true },
+  grammaticalFeatures: { column: 'grammatical_features_json', kind: 'json', linguistic: true },
+  regionalVariants: { column: 'regional_variants_json', kind: 'json', linguistic: true },
+  signDefinition: { column: 'sign_definition', kind: 'text', linguistic: true },
+  nonManualMarkers: { column: 'non_manual_markers_json', kind: 'json', linguistic: true },
+  dominantHand: { column: 'dominant_hand', kind: 'text', linguistic: true },
+  isDefaultVariant: { column: 'is_default_variant', kind: 'bool', linguistic: true },
+  sourceReference: { column: 'source_reference', kind: 'text', linguistic: false },
+  licenseRef: { column: 'license_ref', kind: 'text', linguistic: false },
+  locale: { column: 'locale', kind: 'text', linguistic: false },
+};
+
+function entryColumns(input: EntryInput): { columns: string[]; values: (string | number | null)[] } {
+  const columns: string[] = [];
+  const values: (string | number | null)[] = [];
+  for (const [key, value] of Object.entries(input) as [keyof EntryInput, unknown][]) {
+    if (value === undefined) continue;
+    const f = ENTRY_FIELDS[key];
+    columns.push(f.column);
+    values.push(f.kind === 'json' ? JSON.stringify(value) : f.kind === 'bool' ? (value ? 1 : 0) : (value as string | null));
+  }
+  return { columns, values };
+}
+
+async function assertConceptExists(svc: Services, conceptKey: string | null | undefined) {
+  if (conceptKey && !(await first(svc.db, 'SELECT concept_key FROM lexical_concepts WHERE concept_key = ?', conceptKey))) {
+    throw new AppError('validation_error', { details: { issues: [{ path: 'conceptKey', code: 'unknown_concept' }] } });
+  }
+}
 
 async function snapshotEntry(svc: Services, e: SignEntryRow, reason: string, actorId: string) {
   await run(
@@ -229,15 +315,16 @@ adminDictionaryRoutes.get('/entries', async (c) => {
       q: z.string().trim().max(100).optional(),
       validationStatus: z.enum(['draft', 'in_review', 'needs_expert', 'approved', 'rejected']).optional(),
       publicationStatus: z.enum(['draft', 'published', 'unpublished']).optional(),
+      conceptKey: z.string().max(64).optional(),
     }),
   );
-  const rows = await all<SignEntryRow & { variant_count: number }>(
+  const rows = await all<SignEntryRow>(
     svc.db,
     `SELECT * FROM sign_entries
-      WHERE (?1 IS NULL OR instr(lower(canonical_label), lower(?1)) > 0 OR instr(label_he, ?1) > 0 OR instr(lower(sign_code), lower(?1)) > 0)
-        AND (?2 IS NULL OR validation_status = ?2) AND (?3 IS NULL OR publication_status = ?3)
+      WHERE (?1 IS NULL OR instr(lower(canonical_label), lower(?1)) > 0 OR instr(label_he, ?1) > 0 OR instr(hebrew_terms_json, ?1) > 0 OR instr(lower(sign_code), lower(?1)) > 0)
+        AND (?2 IS NULL OR validation_status = ?2) AND (?3 IS NULL OR publication_status = ?3) AND (?6 IS NULL OR concept_key = ?6)
       ORDER BY sign_code LIMIT ?4 OFFSET ?5`,
-    q.q || null, q.validationStatus ?? null, q.publicationStatus ?? null, q.limit + 1, q.cursor,
+    q.q || null, q.validationStatus ?? null, q.publicationStatus ?? null, q.limit + 1, q.cursor, q.conceptKey ?? null,
   );
   const p = page(rows, q.limit, q.cursor);
   return ok(c, { entries: p.items.map(adminEntryView), nextCursor: p.nextCursor });
@@ -246,17 +333,17 @@ adminDictionaryRoutes.get('/entries', async (c) => {
 adminDictionaryRoutes.post('/entries', async (c) => {
   const svc = c.get('services');
   const input = await body(c, EntryFields.required({ canonicalLabel: true }).strict());
+  await assertConceptExists(svc, input.conceptKey);
   const now = svc.now();
   const next = ((await first<{ n: number }>(svc.db, `SELECT COALESCE(MAX(CAST(substr(sign_code, 4) AS INTEGER)), 0) AS n FROM sign_entries`))?.n ?? 0) + 1;
   const id = newId('sgn');
   const code = `SG-${String(next).padStart(4, '0')}`;
+  const { columns, values } = entryColumns(input);
   await run(
     svc.db,
-    `INSERT INTO sign_entries (id, sign_code, canonical_label, label_he, label_en, description, locale, variants_json, grammar_json,
-       validation_status, license_status, publication_status, version, created_by, created_at, updated_at)
-     VALUES (?,?,?,?,?,?,?,?,?, 'draft', 'pending', 'draft', 1, ?, ?, ?)`,
-    id, code, input.canonicalLabel, input.labelHe ?? null, input.labelEn ?? null, input.description ?? null, input.locale ?? 'ISL',
-    JSON.stringify(input.variants ?? []), JSON.stringify(input.grammar ?? {}), actor(c).id, now, now,
+    `INSERT INTO sign_entries (id, sign_code, ${columns.join(', ')}, validation_status, license_status, publication_status, version, created_by, created_at, updated_at)
+     VALUES (?, ?, ${columns.map(() => '?').join(', ')}, 'draft', 'pending', 'draft', 1, ?, ?, ?)`,
+    id, code, ...values, actor(c).id, now, now,
   );
   await audit(svc, { action: 'dictionary.entry_created', actorUserId: actor(c).id, actorRole: actor(c).platform_role, targetType: 'sign_entry', targetId: id, requestId: c.get('requestId') });
   return ok(c, { entry: adminEntryView(await loadEntry(svc, id)) }, {}, 201);
@@ -277,25 +364,25 @@ adminDictionaryRoutes.patch('/entries/:id', async (c) => {
   const svc = c.get('services');
   const input = await body(c, EntryFields.strict());
   const e = await loadEntry(svc, c.req.param('id'));
+  await assertConceptExists(svc, input.conceptKey);
+  const { columns, values } = entryColumns(input);
+  if (columns.length === 0) return ok(c, { entry: adminEntryView(e) });
   await snapshotEntry(svc, e, 'before_edit', actor(c).id);
-  const linguistic = ['canonicalLabel', 'variants', 'grammar', 'description', 'labelHe', 'labelEn'].some((k) => k in input);
+  const linguistic = (Object.keys(input) as (keyof EntryInput)[]).some((k) => input[k] !== undefined && ENTRY_FIELDS[k].linguistic);
   const resetApproval = linguistic && e.validation_status === 'approved';
+  const resetLicense = input.licenseRef !== undefined && input.licenseRef !== e.license_ref && e.license_status === 'confirmed';
+  const unpublish = (resetApproval || resetLicense) && e.publication_status === 'published';
   await run(
     svc.db,
-    `UPDATE sign_entries SET canonical_label = ?, label_he = ?, label_en = ?, description = ?, locale = ?, variants_json = ?, grammar_json = ?,
-       validation_status = ?, publication_status = ?, version = version + 1, updated_at = ? WHERE id = ?`,
-    input.canonicalLabel ?? e.canonical_label,
-    input.labelHe !== undefined ? input.labelHe : e.label_he,
-    input.labelEn !== undefined ? input.labelEn : e.label_en,
-    input.description !== undefined ? input.description : e.description,
-    input.locale ?? e.locale,
-    input.variants ? JSON.stringify(input.variants) : e.variants_json,
-    input.grammar ? JSON.stringify(input.grammar) : e.grammar_json,
+    `UPDATE sign_entries SET ${columns.map((col) => `${col} = ?`).join(', ')},
+       validation_status = ?, license_status = ?, publication_status = ?, version = version + 1, updated_at = ? WHERE id = ?`,
+    ...values,
     resetApproval ? 'in_review' : e.validation_status,
-    resetApproval && e.publication_status === 'published' ? 'unpublished' : e.publication_status,
+    resetLicense ? 'pending' : e.license_status,
+    unpublish ? 'unpublished' : e.publication_status,
     svc.now(), e.id,
   );
-  await audit(svc, { action: 'dictionary.entry_updated', actorUserId: actor(c).id, actorRole: actor(c).platform_role, targetType: 'sign_entry', targetId: e.id, requestId: c.get('requestId'), metadata: { approvalReset: resetApproval } });
+  await audit(svc, { action: 'dictionary.entry_updated', actorUserId: actor(c).id, actorRole: actor(c).platform_role, targetType: 'sign_entry', targetId: e.id, requestId: c.get('requestId'), metadata: { approvalReset: resetApproval, licenseReset: resetLicense } });
   return ok(c, { entry: adminEntryView(await loadEntry(svc, e.id)) });
 });
 
@@ -378,6 +465,142 @@ adminDictionaryRoutes.post('/versions', async (c) => {
   ]);
   await audit(svc, { action: 'dictionary.version_published', actorUserId: actor(c).id, targetType: 'dictionary_version', targetId: id, requestId: c.get('requestId'), metadata: { version: next, entries: entries.length } });
   return ok(c, { version: next, entryCount: entries.length }, {}, 201);
+});
+
+// --- Lexical concepts ------------------------------------------------------
+// Concepts are a planning inventory (what Signa should eventually cover). A concept is
+// "covered" only through published entries; seeded concepts carry no sign data.
+interface ConceptRow {
+  concept_key: string;
+  category: string;
+  hebrew_terms_json: string;
+  english_terms_json: string;
+  sense_description: string | null;
+  status: 'candidate' | 'in_progress' | 'deferred' | 'rejected';
+  created_at: number;
+  updated_at: number;
+  entries: number;
+  published_entries: number;
+  published_with_animation: number;
+}
+
+const CONCEPT_COUNTS = `
+  (SELECT COUNT(*) FROM sign_entries e WHERE e.concept_key = c.concept_key) AS entries,
+  (SELECT COUNT(*) FROM sign_entries e WHERE e.concept_key = c.concept_key AND e.publication_status = 'published') AS published_entries,
+  (SELECT COUNT(*) FROM sign_entries e WHERE e.concept_key = c.concept_key AND e.publication_status = 'published'
+      AND EXISTS (SELECT 1 FROM animation_assets a WHERE a.sign_entry_id = e.id AND a.approval_status = 'approved')) AS published_with_animation`;
+
+const conceptView = (r: ConceptRow) => ({
+  conceptKey: r.concept_key,
+  category: r.category,
+  hebrewTerms: parseJson<string[]>(r.hebrew_terms_json, []),
+  englishTerms: parseJson<string[]>(r.english_terms_json, []),
+  senseDescription: r.sense_description,
+  status: r.status,
+  entries: r.entries,
+  publishedEntries: r.published_entries,
+  renderable: r.published_with_animation > 0,
+  updatedAt: iso(r.updated_at),
+});
+
+const ConceptFields = z
+  .object({
+    category: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/),
+    hebrewTerms: Terms,
+    englishTerms: Terms,
+    senseDescription: z.string().trim().max(2000).nullable(),
+    status: z.enum(['candidate', 'in_progress', 'deferred', 'rejected']),
+  })
+  .partial();
+
+async function loadConcept(svc: Services, key: string): Promise<ConceptRow> {
+  const r = await first<ConceptRow>(svc.db, `SELECT c.*, ${CONCEPT_COUNTS} FROM lexical_concepts c WHERE c.concept_key = ?`, key);
+  if (!r) throw new AppError('not_found');
+  return r;
+}
+
+adminDictionaryRoutes.get('/concepts', async (c) => {
+  const svc = c.get('services');
+  const q = query(
+    c,
+    PageQuery.extend({
+      q: z.string().trim().max(100).optional(),
+      category: z.string().max(40).optional(),
+      status: z.enum(['candidate', 'in_progress', 'deferred', 'rejected']).optional(),
+      coverage: z.enum(['missing', 'covered']).optional(),
+    }),
+  );
+  const rows = await all<ConceptRow>(
+    svc.db,
+    `SELECT * FROM (SELECT c.*, ${CONCEPT_COUNTS} FROM lexical_concepts c) c
+      WHERE (?1 IS NULL OR instr(c.concept_key, upper(?1)) > 0 OR instr(c.hebrew_terms_json, ?1) > 0 OR instr(lower(c.english_terms_json), lower(?1)) > 0)
+        AND (?2 IS NULL OR c.category = ?2) AND (?3 IS NULL OR c.status = ?3)
+        AND (?4 IS NULL OR (?4 = 'covered' AND c.published_with_animation > 0) OR (?4 = 'missing' AND c.published_with_animation = 0))
+      ORDER BY c.category, c.concept_key LIMIT ?5 OFFSET ?6`,
+    q.q || null, q.category ?? null, q.status ?? null, q.coverage ?? null, q.limit + 1, q.cursor,
+  );
+  const p = page(rows, q.limit, q.cursor);
+  return ok(c, { concepts: p.items.map(conceptView), nextCursor: p.nextCursor });
+});
+
+adminDictionaryRoutes.get('/concepts/:key', async (c) => {
+  const svc = c.get('services');
+  const concept = await loadConcept(svc, c.req.param('key'));
+  const entries = await all<SignEntryRow>(svc.db, 'SELECT * FROM sign_entries WHERE concept_key = ? ORDER BY sign_code', concept.concept_key);
+  return ok(c, { concept: conceptView(concept), entries: entries.map(adminEntryView) });
+});
+
+adminDictionaryRoutes.post('/concepts', async (c) => {
+  const svc = c.get('services');
+  const input = await body(c, ConceptFields.required({ category: true }).extend({ conceptKey: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/) }).strict());
+  const now = svc.now();
+  const inserted = await run(
+    svc.db,
+    `INSERT INTO lexical_concepts (concept_key, category, hebrew_terms_json, english_terms_json, sense_description, status, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?) ON CONFLICT (concept_key) DO NOTHING`,
+    input.conceptKey, input.category, JSON.stringify(input.hebrewTerms ?? []), JSON.stringify(input.englishTerms ?? []),
+    input.senseDescription ?? null, input.status ?? 'candidate', now, now,
+  );
+  if (!inserted) throw new AppError('conflict', { details: { reason: 'concept_exists' } });
+  await audit(svc, { action: 'dictionary.concept_created', actorUserId: actor(c).id, targetType: 'concept', targetId: input.conceptKey, requestId: c.get('requestId') });
+  return ok(c, { concept: conceptView(await loadConcept(svc, input.conceptKey)) }, {}, 201);
+});
+
+adminDictionaryRoutes.patch('/concepts/:key', async (c) => {
+  const svc = c.get('services');
+  const input = await body(c, ConceptFields.strict());
+  const cur = await loadConcept(svc, c.req.param('key'));
+  await run(
+    svc.db,
+    `UPDATE lexical_concepts SET category = ?, hebrew_terms_json = ?, english_terms_json = ?, sense_description = ?, status = ?, updated_at = ? WHERE concept_key = ?`,
+    input.category ?? cur.category,
+    input.hebrewTerms ? JSON.stringify(input.hebrewTerms) : cur.hebrew_terms_json,
+    input.englishTerms ? JSON.stringify(input.englishTerms) : cur.english_terms_json,
+    input.senseDescription !== undefined ? input.senseDescription : cur.sense_description,
+    input.status ?? cur.status,
+    svc.now(), cur.concept_key,
+  );
+  await audit(svc, { action: 'dictionary.concept_updated', actorUserId: actor(c).id, targetType: 'concept', targetId: cur.concept_key, requestId: c.get('requestId') });
+  return ok(c, { concept: conceptView(await loadConcept(svc, cur.concept_key)) });
+});
+
+/** Lexical coverage by category — a planning metric, not a measure of translation quality. */
+adminDictionaryRoutes.get('/coverage', async (c) => {
+  const svc = c.get('services');
+  const rows = await all<{ category: string; concepts: number; with_published_entry: number; renderable: number }>(
+    svc.db,
+    `SELECT c.category, COUNT(*) AS concepts,
+            SUM(CASE WHEN c.published_entries > 0 THEN 1 ELSE 0 END) AS with_published_entry,
+            SUM(CASE WHEN c.published_with_animation > 0 THEN 1 ELSE 0 END) AS renderable
+       FROM (SELECT c.*, ${CONCEPT_COUNTS} FROM lexical_concepts c WHERE c.status <> 'rejected') c
+      GROUP BY c.category ORDER BY c.category`,
+  );
+  const totals = rows.reduce((t, r) => ({ concepts: t.concepts + r.concepts, withPublishedEntry: t.withPublishedEntry + r.with_published_entry, renderable: t.renderable + r.renderable }), { concepts: 0, withPublishedEntry: 0, renderable: 0 });
+  return ok(c, {
+    categories: rows.map((r) => ({ category: r.category, concepts: r.concepts, withPublishedEntry: r.with_published_entry, renderable: r.renderable })),
+    totals,
+    note: 'lexical_coverage_only_not_translation_quality',
+  });
 });
 
 // --- Animation assets ------------------------------------------------------

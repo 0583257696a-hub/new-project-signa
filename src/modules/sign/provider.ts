@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Services } from '../../context';
 import { all } from '../../lib/db';
 import { AppError } from '../../lib/errors';
+import { selectCandidate, type LexicalCandidate } from './candidates';
 import type { ProposedSegment, SignTranslationInput, SignTranslationResult } from './types';
 
 /** Translation engine contract. Implementations must never fabricate dictionary or asset IDs. */
@@ -25,32 +26,56 @@ export class NoSignProvider implements SignTranslationProvider {
 /**
  * DEVELOPMENT / EXPERIMENTAL adapter.
  *
- * Looks up phrases from the published, approved dictionary (by Hebrew label and
- * approved variants), longest match first, preserving source order. This is NOT
- * a translation into ISL grammar — Hebrew word order and missing non-manual
- * markers make it at best an illustrative segmentation. It therefore always
- * reports engineValidated = false, which caps results at `experimental`.
- * It only references entries that actually exist in the approved dictionary;
- * unmatched words become explicit `unsupported` segments.
+ * Looks up Hebrew terms of published, approved entries (label + `hebrew_terms`), longest
+ * match first, preserving source order, and picks an entry per term with
+ * `selectCandidate` — an ambiguous term (several eligible entries, no reviewer-chosen
+ * default) becomes an explicit `unsupported` segment rather than a guess.
+ *
+ * This is NOT a translation into ISL grammar: Hebrew word order is kept and no sentence
+ * analysis (questions, negation, time, spatial reference, grammatical non-manual markers)
+ * is performed. It therefore always reports engineValidated = false, which caps results
+ * at `experimental`. It only references entries that exist in the approved dictionary.
  */
 export class DictionaryLookupProvider implements SignTranslationProvider {
   readonly name = 'dictionary-lookup';
   constructor(private readonly db: D1Database) {}
 
   async translate(input: SignTranslationInput): Promise<SignTranslationResult> {
-    const entries = await all<{ id: string; label_he: string | null; variants_json: string; canonical_label: string }>(
+    const entries = await all<{
+      id: string;
+      label_he: string | null;
+      hebrew_terms_json: string;
+      canonical_label: string;
+      concept_key: string | null;
+      is_default_variant: number;
+      has_asset: number;
+    }>(
       this.db,
-      `SELECT id, label_he, variants_json, canonical_label FROM sign_entries
-        WHERE publication_status = 'published' AND validation_status = 'approved' AND license_status = 'confirmed'`,
+      `SELECT e.id, e.label_he, e.hebrew_terms_json, e.canonical_label, e.concept_key, e.is_default_variant,
+              EXISTS (SELECT 1 FROM animation_assets a WHERE a.sign_entry_id = e.id AND a.approval_status = 'approved') AS has_asset
+         FROM sign_entries e
+        WHERE e.publication_status = 'published' AND e.validation_status = 'approved' AND e.license_status = 'confirmed'`,
     );
-    const index = new Map<string, { id: string; gloss: string }>();
+    const index = new Map<string, Indexed[]>();
     let maxWords = 1;
     for (const e of entries) {
-      const labels = [e.label_he, ...safeArray(e.variants_json)].filter((l): l is string => !!l);
-      for (const l of labels) {
-        const k = normalizeHe(l);
-        if (!k || index.has(k)) continue;
-        index.set(k, { id: e.id, gloss: e.canonical_label });
+      const terms = new Set([e.label_he, ...safeArray(e.hebrew_terms_json)].filter((l): l is string => !!l).map(normalizeHe).filter(Boolean));
+      for (const k of terms) {
+        const list = index.get(k) ?? [];
+        list.push({
+          gloss: e.canonical_label,
+          candidate: {
+            entryId: e.id,
+            conceptKey: e.concept_key,
+            // No context model here: every sense of a term fits equally well, so genuinely
+            // different senses tie and are reported as ambiguous.
+            contextMatch: 1,
+            linguisticValidation: 'verified',
+            animationAvailable: e.has_asset === 1,
+            isDefaultVariant: e.is_default_variant === 1,
+          },
+        });
+        index.set(k, list);
         maxWords = Math.max(maxWords, k.split(' ').length);
       }
     }
@@ -60,31 +85,42 @@ export class DictionaryLookupProvider implements SignTranslationProvider {
       end: m.index! + m[0].length,
     }));
     if (tokens.length === 0) {
-      return { engine: { name: this.name, version: '1.0.0' }, engineValidated: false, segments: [], unsupportedReason: 'no_words' };
+      return { engine: { name: this.name, version: '1.1.0' }, engineValidated: false, segments: [], unsupportedReason: 'no_words' };
     }
     const segments: ProposedSegment[] = [];
     for (let i = 0; i < tokens.length; ) {
-      let hit: { id: string; gloss: string; len: number } | undefined;
+      let hit: { list: Indexed[]; len: number } | undefined;
       for (let n = Math.min(maxWords, tokens.length - i); n >= 1 && !hit; n--) {
         const key = tokens.slice(i, i + n).map((t) => t.key).join(' ');
         const found = index.get(key) ?? (n === 1 ? stripPrefix(key, index) : undefined);
-        if (found) hit = { ...found, len: n };
+        if (found) hit = { list: found, len: n };
       }
-      if (hit) {
-        segments.push({ kind: 'sign', signEntryId: hit.id, gloss: hit.gloss, sourceSpan: { start: tokens[i]!.start, end: tokens[i + hit.len - 1]!.end } });
-        i += hit.len;
-      } else {
-        const t = tokens[i]!;
-        segments.push({ kind: 'unsupported', sourceSpan: { start: t.start, end: t.end }, reason: 'no_approved_sign' });
+      const span = { start: tokens[i]!.start, end: tokens[i + (hit?.len ?? 1) - 1]!.end };
+      if (!hit) {
+        segments.push({ kind: 'unsupported', sourceSpan: span, reason: 'no_approved_sign' });
         i++;
+        continue;
       }
+      const choice = selectCandidate(hit.list.map((x) => x.candidate));
+      if (choice.kind === 'selected') {
+        const gloss = hit.list.find((x) => x.candidate.entryId === choice.candidate.entryId)!.gloss;
+        segments.push({ kind: 'sign', signEntryId: choice.candidate.entryId, gloss, sourceSpan: span });
+      } else {
+        segments.push({ kind: 'unsupported', sourceSpan: span, reason: choice.kind === 'ambiguous' ? 'ambiguous_term' : 'no_animation_available' });
+      }
+      i += hit.len;
     }
-    return { engine: { name: this.name, version: '1.0.0' }, engineValidated: false, segments };
+    return { engine: { name: this.name, version: '1.1.0' }, engineValidated: false, segments };
   }
 
   async health() {
     return { status: 'ok' as const };
   }
+}
+
+interface Indexed {
+  gloss: string;
+  candidate: LexicalCandidate;
 }
 
 const normalizeHe = (s: string) => s.toLowerCase().replace(/[֑-ׇ]/g, '').replace(/[^\p{L}\p{N}\s'"׳״]/gu, '').trim().replace(/\s+/g, ' ');
@@ -96,7 +132,7 @@ const safeArray = (json: string): string[] => {
     return [];
   }
 };
-function stripPrefix(key: string, index: Map<string, { id: string; gloss: string }>) {
+function stripPrefix<T>(key: string, index: Map<string, T>): T | undefined {
   for (const p of ['ו', 'ה', 'ב', 'ל', 'מ', 'ש', 'כ']) {
     if (key.startsWith(p) && key.length - p.length >= 2) {
       const hit = index.get(key.slice(p.length));

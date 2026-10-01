@@ -20,7 +20,7 @@ describe('sign dictionary & asset registry', () => {
     const base = '/api/v1/admin/dictionary';
 
     expect((await user.client.post(`${base}/entries`, { canonicalLabel: 'HELLO' })).status).toBe(403);
-    const created = await admin.client.post(`${base}/entries`, { canonicalLabel: 'HELLO', labelHe: 'שלום', variants: ['היי'] });
+    const created = await admin.client.post(`${base}/entries`, { canonicalLabel: 'HELLO', labelHe: 'שלום', hebrewTerms: ['היי'] });
     expect(created.status).toBe(201);
     const entry = created.body.data.entry;
     expect(entry).toMatchObject({ code: 'SG-0001', validationStatus: 'draft', licenseStatus: 'pending', publicationStatus: 'draft' });
@@ -74,7 +74,7 @@ describe('sign dictionary & asset registry', () => {
     expect((await h.app.request(url.pathname + url.search, {}, h.env)).status).toBe(404); // expired
 
     // Editing linguistic content resets approval and unpublishes; history is kept.
-    const edited = await admin.client.patch(`${base}/entries/${entry.id}`, { variants: ['היי', 'הי'] });
+    const edited = await admin.client.patch(`${base}/entries/${entry.id}`, { hebrewTerms: ['היי', 'הי'] });
     expect(edited.body.data.entry).toMatchObject({ validationStatus: 'in_review', publicationStatus: 'unpublished', version: 4 });
     expect((await user.client.get(`/api/v1/dictionary/entries/${entry.id}`)).status).toBe(404);
     const revs = await admin.client.get(`${base}/entries/${entry.id}/revisions`);

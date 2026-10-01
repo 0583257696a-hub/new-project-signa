@@ -1,7 +1,8 @@
 import type { Services } from '../../context';
-import { all, first } from '../../lib/db';
+import { all, first, parseJson } from '../../lib/db';
 import { publicAssetUrl, signedAssetUrl } from '../dictionary/asset-store';
 import type {
+  NonManualMarker,
   NormalizedSegment,
   NormalizedSignResult,
   OutputFormat,
@@ -19,6 +20,8 @@ interface EntryRow {
   sign_code: string;
   canonical_label: string;
   label_he: string | null;
+  concept_key: string | null;
+  non_manual_markers_json: string;
 }
 interface AssetRow {
   id: string;
@@ -63,7 +66,7 @@ export async function validateProposal(
   if (ids.size || labels.size) {
     const rows = await all<EntryRow & { canonical_label: string }>(
       svc.db,
-      `SELECT id, sign_code, canonical_label, label_he FROM sign_entries
+      `SELECT id, sign_code, canonical_label, label_he, concept_key, non_manual_markers_json FROM sign_entries
         WHERE publication_status = 'published'
           AND (id IN (SELECT value FROM json_each(?)) OR canonical_label IN (SELECT value FROM json_each(?)))`,
       JSON.stringify([...ids]),
@@ -140,10 +143,12 @@ export async function validateProposal(
       kind: s.kind,
       status,
       gloss: entry?.canonical_label ?? s.gloss ?? null,
-      signEntry: entry ? { id: entry.id, code: entry.sign_code, label: entry.label_he } : null,
+      signEntry: entry ? { id: entry.id, code: entry.sign_code, label: entry.label_he, conceptKey: entry.concept_key } : null,
       assets,
       timing: { startMs: cursor, durationMs: renderable ? duration : 0 },
-      // Non-manual markers are passed through only for renderable segments of a validated engine;
+      // Lexical markers belong to the expert-approved sign itself.
+      lexicalNonManualMarkers: status === 'verified_sign' && entry ? parseJson<NonManualMarker[]>(entry.non_manual_markers_json, []) : [],
+      // Sentence-level markers are passed through only for renderable segments of a validated engine;
       // otherwise they would imply linguistic content nobody reviewed.
       nonManualMarkers: renderable && proposal.engineValidated ? (s.nonManualMarkers ?? []) : [],
       sourceSpan: s.sourceSpan && s.sourceSpan.end <= args.text.length && s.sourceSpan.start <= s.sourceSpan.end ? s.sourceSpan : null,
@@ -188,17 +193,23 @@ export async function validateProposal(
       index: s.index,
       status: s.status,
       sourceSpan: s.sourceSpan,
-      reason: s.status === 'unknown_sign' ? 'not_in_approved_dictionary' : s.status === 'missing_asset' ? 'no_approved_animation' : 'unsupported_by_engine',
+      reason:
+        s.status === 'unknown_sign'
+          ? 'not_in_approved_dictionary'
+          : s.status === 'missing_asset'
+            ? 'no_approved_animation'
+            : (proposal.segments[s.index]?.reason ?? 'unsupported_by_engine'),
     })),
     quality: {
       segmentsTotal: content.length,
       verifiedSegments: verified,
       fingerspelledSegments: fingerspelled,
       unsupportedSegments: notRenderable.length,
-      coverage: Math.min(1, Math.round((coveredChars / letterChars) * 100) / 100),
+      lexicalCoverage: Math.min(1, Math.round((coveredChars / letterChars) * 100) / 100),
       renderable: allRenderable,
       totalDurationMs: cursor,
     },
+    sourceTextStored: false,
     notices,
     createdAt: new Date(svc.now()).toISOString(),
   };

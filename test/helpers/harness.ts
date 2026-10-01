@@ -168,13 +168,17 @@ export async function signUp(
 }
 
 /** Creates a published, approved, licence-confirmed dictionary entry with an approved asset (direct DB seeding). */
-export function seedSign(h: Harness, opts: { code: string; gloss: string; labelHe: string; variants?: string[]; withAsset?: boolean; visibility?: 'public' | 'private' }) {
+export function seedSign(
+  h: Harness,
+  opts: { code: string; gloss: string; labelHe: string; variants?: string[]; withAsset?: boolean; visibility?: 'public' | 'private'; conceptKey?: string; isDefault?: boolean; nmm?: unknown[] },
+) {
   const id = `sgn_${opts.code.toLowerCase().replace(/[^a-z0-9]/g, '')}seed00000000`;
   const now = h.clock.now;
   h.d1.q(
-    `INSERT INTO sign_entries (id, sign_code, canonical_label, label_he, variants_json, validation_status, license_status, reviewer_ref, publication_status, version, created_at, updated_at)
-     VALUES (?,?,?,?,?, 'approved', 'confirmed', 'expert-panel-1', 'published', 1, ?, ?)`,
-    id, opts.code, opts.gloss, opts.labelHe, JSON.stringify(opts.variants ?? []), now, now,
+    `INSERT INTO sign_entries (id, sign_code, canonical_label, label_he, hebrew_terms_json, concept_key, is_default_variant, non_manual_markers_json,
+       validation_status, license_status, reviewer_ref, publication_status, version, created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?, 'approved', 'confirmed', 'expert-panel-1', 'published', 1, ?, ?)`,
+    id, opts.code, opts.gloss, opts.labelHe, JSON.stringify(opts.variants ?? []), opts.conceptKey ?? null, opts.isDefault ? 1 : 0, JSON.stringify(opts.nmm ?? []), now, now,
   );
   if (opts.withAsset !== false) {
     h.d1.q(
