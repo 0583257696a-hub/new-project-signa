@@ -123,7 +123,7 @@ SIGN_RESULT_TTL_SECONDS = "3600"
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "signa-db-production"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "777cd7ee-633d-49f7-b9b5-1f1652fe92bf"
 migrations_dir = "migrations"
 
 [[env.production.r2_buckets]]
