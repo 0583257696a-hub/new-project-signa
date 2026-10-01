@@ -31,7 +31,7 @@ export class MemoryAssetStore implements AssetStore {
   async get(key: string) {
     const o = this.objects.get(key);
     if (!o) return null;
-    return { body: new Blob([o.bytes as BlobPart]).stream(), contentType: o.contentType, size: o.bytes.byteLength, etag: '"x"' };
+    return { body: new Blob([o.bytes as unknown as ArrayBuffer]).stream(), contentType: o.contentType, size: o.bytes.byteLength, etag: '"x"' };
   }
   async delete(key: string) {
     this.objects.delete(key);

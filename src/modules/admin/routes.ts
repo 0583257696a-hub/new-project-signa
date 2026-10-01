@@ -304,7 +304,7 @@ adminRoutes.put('/plans/:id/entitlements', async (c) => {
   const svc = c.get('services');
   const p = await first<PlanRow>(svc.db, 'SELECT id FROM plans WHERE id = ?', c.req.param('id'));
   if (!p) throw new AppError('not_found');
-  const raw = await body(c, z.record(z.enum(ENTITLEMENT_KEYS as [string, ...string[]]), z.unknown()));
+  const raw = await body(c, z.partialRecord(z.enum(ENTITLEMENT_KEYS as [string, ...string[]]), z.unknown()));
   const now = svc.now();
   for (const [key, value] of Object.entries(raw)) {
     const parsed = EntitlementValue[key]!.safeParse(value);
