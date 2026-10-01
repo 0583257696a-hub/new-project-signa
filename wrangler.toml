@@ -102,8 +102,8 @@ crons = ["*/10 * * * *"]
 
 # ---------------------------------------------------------------------------
 [env.production]
-name = "signa-api-production"
-# Temporary: served on https://signa-api-production.<account-subdomain>.workers.dev until a custom domain is set.
+name = "signa-api" # must match the Worker connected in the Cloudflare dashboard
+# Temporary: served on https://signa-api.<account-subdomain>.workers.dev until a custom domain is set.
 workers_dev = true
 
 [env.production.vars]
