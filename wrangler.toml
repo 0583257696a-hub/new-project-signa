@@ -103,7 +103,8 @@ crons = ["*/10 * * * *"]
 # ---------------------------------------------------------------------------
 [env.production]
 name = "signa-api-production"
-workers_dev = false
+# Temporary: served on https://signa-api-production.<account-subdomain>.workers.dev until a custom domain is set.
+workers_dev = true
 
 [env.production.vars]
 APP_ENV = "production"
