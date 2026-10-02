@@ -46,7 +46,7 @@ Worker **`signa-api`** → Settings → Build:
 |---|---|
 | Git repository | `new-project-signa`, branch `main` |
 | Build command | `npm ci` |
-| Deploy command | `npx wrangler d1 migrations apply signa-db-production --remote --env production && npx wrangler deploy --env production` |
+| Deploy command | `npm run deploy` (applies pending D1 migrations, then deploys the production environment) |
 | Root directory | `/` |
 
 `[env.production] name = "signa-api"` must match the Worker name in the dashboard. Secrets such as `APP_SECRET` are set under Worker → Settings → Variables and Secrets (type **Secret**). Every push to `main` builds, applies pending migrations and deploys.
