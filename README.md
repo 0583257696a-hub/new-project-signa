@@ -55,6 +55,6 @@ These items need decisions, credentials or external work and are **not** done:
 - **Payment provider.** Only `PaymentProvider` plus a dev adapter exist. Pick a provider, implement its adapter (checkout, webhook signature verification, status lookup) and set real prices. Prices are intentionally `null` ("to be announced").
 - **Email provider.** Only `EmailProvider` plus a dev in-memory adapter exist. Production delivery stays disabled until a real adapter is added.
 - **ISL translation engine.** The default `dictionary_lookup` adapter is an experimental, illustrative lookup over approved entries. It is **not** ISL grammar, and its output is always labelled `experimental`. A linguistically validated engine can be plugged in through `SignTranslationProvider` / `SIGN_PROVIDER=http`.
-- **Dictionary content and animation assets.** The dictionary starts with 114 *candidate concepts* and no signs. Entries need ISL expert review and confirmed licences before publication (see `docs/DICTIONARY.md`).
+- **Dictionary content and animation assets.** The dictionary starts with 475 *candidate concepts* and no signs. Entries need ISL expert review and confirmed licences before publication (see `docs/DICTIONARY.md`).
 - **Google OAuth.** Implemented, but it needs Google credentials and the `google_oauth` feature flag turned on.
 - **Production values.** Production runs on the `signa-api` Worker at `https://signa-api.abd-digital.workers.dev` (D1 `signa-db`); staging values in `wrangler.toml` are still placeholders, and a custom domain is not set up yet.

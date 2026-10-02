@@ -46,7 +46,7 @@ Animations are separate assets (`animation_assets`) linked to entries, each with
 
 ## 3. Starter concept inventory
 
-Migration `0004` seeds **114 candidate concepts** in 10 categories:
+Migrations `0004` and `0005` seed **475 candidate concepts** in 20 categories (the first 114 are listed below; `0005` adds numbers, colors, calendar, home, food & drink, clothing, body & health, communication & accessibility, public services, education & work, nature, religion & holidays, and more actions, questions, feelings, places and descriptions):
 
 | Category | Concepts |
 |---|---|

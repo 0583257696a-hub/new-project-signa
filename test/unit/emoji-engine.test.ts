@@ -68,4 +68,13 @@ describe('RuleBasedEmojiEngine', () => {
   it('strips control and bidi override characters', () => {
     expect(normalizeInput('  he‮llo\u0000 ')).toBe('hello');
   });
+
+  it('covers the extended vocabulary (holidays, colors, services, food)', async () => {
+    const r = await t('חג חנוכה שמח! נאכל סופגניות', 'standard', 'emoji_only');
+    expect(r.emojis).toContain('🕎');
+    expect((await t('השוטר הזמין אמבולנס', 'standard', 'emoji_only')).emojis).toEqual(['👮', '🚑']);
+    expect((await t('שנה טובה ומתוקה', 'standard', 'emoji_only')).emojis).toEqual(['🍎']);
+    expect((await t('I love red and blue', 'standard', 'emoji_only')).emojis).toEqual(['❤️', '🔴', '🔵']);
+    expect((await t('נלך לבית הכנסת בשבת', 'standard', 'emoji_only')).emojis).toEqual(['🕍', '🕯️']);
+  });
 });

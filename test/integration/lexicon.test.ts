@@ -38,12 +38,12 @@ describe('selectCandidate', () => {
 describe('lexical dictionary model', () => {
   it('seeds candidate concepts without creating any sign data', async () => {
     const h = createHarness();
-    expect(h.d1.q('SELECT COUNT(*) AS n FROM lexical_concepts')[0]!.n).toBe(114);
+    expect(h.d1.q('SELECT COUNT(*) AS n FROM lexical_concepts')[0]!.n).toBe(475);
     expect(h.d1.q(`SELECT COUNT(*) AS n FROM lexical_concepts WHERE status <> 'candidate'`)[0]!.n).toBe(0);
     expect(h.d1.q('SELECT COUNT(*) AS n FROM sign_entries')[0]!.n).toBe(0);
     const admin = await signUp(h, { role: 'admin' });
     const cov = await admin.client.get('/api/v1/admin/dictionary/coverage');
-    expect(cov.body.data.totals).toEqual({ concepts: 114, withPublishedEntry: 0, renderable: 0 });
+    expect(cov.body.data.totals).toEqual({ concepts: 475, withPublishedEntry: 0, renderable: 0 });
     expect(cov.body.data.note).toBe('lexical_coverage_only_not_translation_quality');
     const help = await admin.client.get('/api/v1/admin/dictionary/concepts?category=health_help&coverage=missing&limit=100');
     expect(help.body.data.concepts.map((c: { conceptKey: string }) => c.conceptKey)).toContain('HELP');
