@@ -1,21 +1,28 @@
-# Signa API — Cloudflare Worker configuration.
-# Secrets are NOT stored here. Set them with `wrangler secret put <NAME> [--env <env>]`:
+# Signa — Cloudflare Worker configuration (API + web app on one Worker).
+#
+# The TOP-LEVEL configuration is PRODUCTION, so a plain `wrangler deploy` (as run by
+# Cloudflare Workers Builds) deploys production. Local development uses `--env dev`
+# (`npm run dev`), staging uses `--env staging`.
+#
+# Secrets are NOT stored here. Set them in the dashboard (Worker → Settings → Variables
+# and Secrets) or with `wrangler secret put <NAME> [--env <env>]`:
 #   APP_SECRET (required, ≥ 32 random chars), DEV_PAYMENT_WEBHOOK_SECRET (dev payments only),
 #   SIGN_PROVIDER_API_KEY (http sign provider), GOOGLE_CLIENT_SECRET (optional OAuth).
 # For local development copy .dev.vars.example to .dev.vars.
 
-name = "signa-api"
+name = "signa-api" # must match the Worker in the Cloudflare dashboard
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
+# Temporary public address: https://signa-api.abd-digital.workers.dev (until a custom domain is set).
 workers_dev = true
 
 [observability]
 enabled = true
 
-# The web app (Next.js static export in ./web) is built on every deploy and served
-# as static assets from this same Worker, so the site and the API share one origin.
+# Builds the web app (Next.js static export in ./web). On Cloudflare Workers Builds it also
+# applies pending D1 migrations to the production database before the Worker is uploaded.
 [build]
-command = "npm run build:web"
+command = "node scripts/build.mjs"
 
 [assets]
 directory = "./web/out"
@@ -24,8 +31,58 @@ not_found_handling = "404-page"
 run_worker_first = ["/api/*", "/health*", "/ready*"]
 
 [vars]
+APP_ENV = "production"
+# Site and API are served from the same Worker (same origin).
+APP_BASE_URL = "https://signa-api.abd-digital.workers.dev"
+API_BASE_URL = "https://signa-api.abd-digital.workers.dev"
+CORS_ALLOWED_ORIGINS = "https://signa-api.abd-digital.workers.dev"
+LOG_LEVEL = "info"
+# Delivery stays disabled until a real provider adapter is implemented and configured.
+EMAIL_PROVIDER = "disabled"
+# No payment provider selected yet: checkout returns `provider_not_configured`.
+PAYMENT_PROVIDER = "none"
+SIGN_PROVIDER = "dictionary_lookup"
+SIGN_PROVIDER_VALIDATED = "false"
+SIGN_SYNC_FALLBACK_MAX_CHARS = "280"
+SIGN_RESULT_TTL_SECONDS = "3600"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "signa-db-production"
+database_id = "777cd7ee-633d-49f7-b9b5-1f1652fe92bf"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "signa-assets-production"
+
+[[queues.producers]]
+binding = "SIGN_JOBS_QUEUE"
+queue = "signa-sign-jobs-production"
+
+[[queues.consumers]]
+queue = "signa-sign-jobs-production"
+max_batch_size = 10
+max_batch_timeout = 2
+max_retries = 3
+dead_letter_queue = "signa-sign-jobs-production-dlq"
+
+[[queues.consumers]]
+queue = "signa-sign-jobs-production-dlq"
+max_retries = 1
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+# ---------------------------------------------------------------------------
+# Local development: `npm run dev` (wrangler dev --env dev). Resources are simulated locally.
+[env.dev]
+name = "signa-api-dev"
+workers_dev = true
+
+[env.dev.vars]
 APP_ENV = "development"
-APP_BASE_URL = "http://localhost:3000"
+APP_BASE_URL = "http://localhost:8787"
 API_BASE_URL = "http://localhost:8787"
 CORS_ALLOWED_ORIGINS = "http://localhost:3000"
 LOG_LEVEL = "info"
@@ -36,34 +93,30 @@ SIGN_PROVIDER_VALIDATED = "false"
 SIGN_SYNC_FALLBACK_MAX_CHARS = "280"
 SIGN_RESULT_TTL_SECONDS = "3600"
 
-[[d1_databases]]
+[[env.dev.d1_databases]]
 binding = "DB"
 database_name = "signa-db"
-database_id = "00000000-0000-0000-0000-000000000000" # replace after `wrangler d1 create signa-db`
+database_id = "00000000-0000-0000-0000-000000000000" # local only
 migrations_dir = "migrations"
 
-[[r2_buckets]]
+[[env.dev.r2_buckets]]
 binding = "ASSETS_BUCKET"
 bucket_name = "signa-assets"
 
-[[queues.producers]]
+[[env.dev.queues.producers]]
 binding = "SIGN_JOBS_QUEUE"
 queue = "signa-sign-jobs"
 
-[[queues.consumers]]
+[[env.dev.queues.consumers]]
 queue = "signa-sign-jobs"
 max_batch_size = 10
 max_batch_timeout = 2
 max_retries = 3
 dead_letter_queue = "signa-sign-jobs-dlq"
 
-[[queues.consumers]]
+[[env.dev.queues.consumers]]
 queue = "signa-sign-jobs-dlq"
-max_batch_size = 10
 max_retries = 1
-
-[triggers]
-crons = ["*/10 * * * *"]
 
 # ---------------------------------------------------------------------------
 [env.staging]
@@ -73,7 +126,7 @@ workers_dev = false
 [env.staging.vars]
 APP_ENV = "staging"
 APP_BASE_URL = "https://staging.signa.example"
-API_BASE_URL = "https://api.staging.signa.example"
+API_BASE_URL = "https://staging.signa.example"
 CORS_ALLOWED_ORIGINS = "https://staging.signa.example"
 LOG_LEVEL = "info"
 EMAIL_PROVIDER = "dev"
@@ -86,7 +139,7 @@ SIGN_RESULT_TTL_SECONDS = "3600"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "signa-db-staging"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "00000000-0000-0000-0000-000000000000" # create with `wrangler d1 create signa-db-staging`
 migrations_dir = "migrations"
 
 [[env.staging.r2_buckets]]
@@ -109,54 +162,4 @@ queue = "signa-sign-jobs-staging-dlq"
 max_retries = 1
 
 [env.staging.triggers]
-crons = ["*/10 * * * *"]
-
-# ---------------------------------------------------------------------------
-[env.production]
-name = "signa-api" # must match the Worker connected in the Cloudflare dashboard
-# Temporary: served on https://signa-api.<account-subdomain>.workers.dev until a custom domain is set.
-workers_dev = true
-
-[env.production.vars]
-APP_ENV = "production"
-# Site and API are served from the same Worker (same origin).
-APP_BASE_URL = "https://signa-api.abd-digital.workers.dev"
-API_BASE_URL = "https://signa-api.abd-digital.workers.dev"
-CORS_ALLOWED_ORIGINS = "https://signa-api.abd-digital.workers.dev"
-LOG_LEVEL = "info"
-# Delivery stays disabled until a real provider adapter is implemented and configured.
-EMAIL_PROVIDER = "disabled"
-# No payment provider selected yet: checkout returns `provider_not_configured`.
-PAYMENT_PROVIDER = "none"
-SIGN_PROVIDER = "dictionary_lookup"
-SIGN_PROVIDER_VALIDATED = "false"
-SIGN_SYNC_FALLBACK_MAX_CHARS = "280"
-SIGN_RESULT_TTL_SECONDS = "3600"
-
-[[env.production.d1_databases]]
-binding = "DB"
-database_name = "signa-db-production"
-database_id = "777cd7ee-633d-49f7-b9b5-1f1652fe92bf"
-migrations_dir = "migrations"
-
-[[env.production.r2_buckets]]
-binding = "ASSETS_BUCKET"
-bucket_name = "signa-assets-production"
-
-[[env.production.queues.producers]]
-binding = "SIGN_JOBS_QUEUE"
-queue = "signa-sign-jobs-production"
-
-[[env.production.queues.consumers]]
-queue = "signa-sign-jobs-production"
-max_batch_size = 10
-max_batch_timeout = 2
-max_retries = 3
-dead_letter_queue = "signa-sign-jobs-production-dlq"
-
-[[env.production.queues.consumers]]
-queue = "signa-sign-jobs-production-dlq"
-max_retries = 1
-
-[env.production.triggers]
 crons = ["*/10 * * * *"]

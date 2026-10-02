@@ -46,18 +46,18 @@ Worker **`signa-api`** → Settings → Build:
 |---|---|
 | Git repository | `new-project-signa`, branch `main` |
 | Build command | `npm ci` |
-| Deploy command | `npm run deploy` (applies pending D1 migrations, then deploys the production environment) |
+| Deploy command | `npx wrangler deploy` (the default) or `npm run deploy` |
 | Root directory | `/` |
 
-`[env.production] name = "signa-api"` must match the Worker name in the dashboard. Secrets such as `APP_SECRET` are set under Worker → Settings → Variables and Secrets (type **Secret**). Every push to `main` builds, applies pending migrations and deploys.
+The **top-level** configuration in `wrangler.toml` is production (`name = "signa-api"`, which must match the Worker name in the dashboard); local development is `--env dev`. The build step (`scripts/build.mjs`) builds the web app and, only on Workers Builds (`WORKERS_CI=1`), applies pending D1 migrations to `signa-db-production` before upload — the build token needs D1 edit permission. Secrets such as `APP_SECRET` are set under Worker → Settings → Variables and Secrets (type **Secret**). Every push to `main` builds, applies pending migrations and deploys.
 
 Temporary address: `https://signa-api.abd-digital.workers.dev` (`/health`, `/ready`, `/api/v1`). A newly created `workers.dev` subdomain can return `NXDOMAIN` from some resolvers for a while (cached negative answers), even though it resolves globally.
 
 ### Option B: from a terminal
 ```bash
 npm ci && npm run typecheck && npm test
-npx wrangler d1 migrations apply signa-db-production --remote --env production
-npx wrangler deploy --env production
+npx wrangler d1 migrations apply signa-db-production --remote
+npx wrangler deploy
 curl https://api.signa.example/health && curl https://api.signa.example/ready
 ```
 Migrations are forward-only, version-controlled SQL in `migrations/`. Wrangler tracks applied migrations in D1. **Never edit an applied migration**: add a new numbered file. Take a D1 backup (Time Travel) before applying migrations to production.
