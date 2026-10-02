@@ -21,6 +21,7 @@ Secrets (never committed):
 ```bash
 openssl rand -base64 48 | npx wrangler secret put APP_SECRET --env production
 # only when used:
+npx wrangler secret put ANTHROPIC_API_KEY            # AI emoji engine (Claude)
 npx wrangler secret put SIGN_PROVIDER_API_KEY --env production
 npx wrangler secret put GOOGLE_CLIENT_SECRET --env production   # plus GOOGLE_CLIENT_ID as a var or secret
 ```
@@ -35,6 +36,8 @@ Rotating `APP_SECRET` invalidates CSRF tokens, signed asset URLs and rate-limit 
 | `SIGN_PROVIDER_VALIDATED` | `true` only after an ISL expert evaluation of the engine | false |
 | `SIGN_SYNC_FALLBACK_MAX_CHARS` | 0–2000 | 280 |
 | `SIGN_RESULT_TTL_SECONDS` | 60–86400 | 3600 |
+| `EMOJI_PROVIDER` | rules, ai (ai needs the `ANTHROPIC_API_KEY` secret; without it rules are used) | rules (production: ai) |
+| `AI_MODEL` | Claude model for the AI emoji engine | claude-opus-5-5 |
 | `LOG_LEVEL` | debug, info, warn, error | info |
 
 ## 4. Migrate & deploy

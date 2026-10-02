@@ -89,7 +89,7 @@ Links in emails point to `APP_BASE_URL/verify-email#token=…`, `/reset-password
 ```json
 { "text": "שלום! אני שמח לראות אותך", "mode": "text_and_emoji", "style": "standard", "language": "he", "variant": 0 }
 ```
-- `mode`: `emoji_only | text_and_emoji`; `style`: `minimal | standard | expressive` (gated by plan); `language`: `he | en | auto`; `variant` 0–9 picks deterministic alternatives ("Regenerate").
+- `mode`: `emoji_only | text_and_emoji`; `style`: `minimal | standard | expressive` (gated by plan); `language`: `he | en | auto`; `variant` 0–9 picks alternatives ("Regenerate"); `allowExternalAi` (default `false`) lets this request use the AI engine (Claude), which sends the text to Anthropic.
 
 Response:
 ```json
@@ -105,6 +105,8 @@ Response:
 }
 ```
 The rule-based engine matches a curated lexicon (Hebrew prefixes and suffixes, English stemming, phrases, negation). It does **not** understand arbitrary sentences, and `coverage` is not an accuracy measure. Requests where nothing matched are not counted.
+
+**AI engine.** When `EMOJI_PROVIDER=ai`, `ANTHROPIC_API_KEY` is set and the request has `allowExternalAi: true`, Claude chooses emojis by context (negation, tone, idioms). Its output is accepted only if the user's text is preserved exactly and the emoji-only field holds nothing but emojis. Otherwise, or on any API error or refusal, the rule engine answers. `meta.provider` / `meta.method` say which engine produced the result (`claude` / `ai` or `rules` / `deterministic_rules`), `meta.aiAvailable` says whether the AI engine is configured, and `meta.coverage` is `null` for AI output.
 
 ## Sign language (ISL)
 | Method | Path | Notes |

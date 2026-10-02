@@ -37,6 +37,11 @@ export interface Bindings {
 
   SIGN_SYNC_FALLBACK_MAX_CHARS?: string;
   SIGN_RESULT_TTL_SECONDS?: string;
+
+  EMOJI_PROVIDER?: string; // 'rules' | 'ai'
+  /** Secret: Anthropic API key for the AI emoji engine. */
+  ANTHROPIC_API_KEY?: string;
+  AI_MODEL?: string;
 }
 
 const csv = z
@@ -74,6 +79,9 @@ const ConfigSchema = z
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     SIGN_SYNC_FALLBACK_MAX_CHARS: z.coerce.number().int().min(0).max(2000).default(280),
     SIGN_RESULT_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
+    EMOJI_PROVIDER: z.enum(['rules', 'ai']).default('rules'),
+    ANTHROPIC_API_KEY: z.string().optional(),
+    AI_MODEL: z.string().min(1).default('claude-opus-5-5'),
   })
   .superRefine((c, ctx) => {
     const prod = c.APP_ENV === 'production';
@@ -98,6 +106,8 @@ export type AppConfig = z.infer<typeof ConfigSchema> & {
   isProduction: boolean;
   cookieSecure: boolean;
   googleOAuthConfigured: boolean;
+  /** EMOJI_PROVIDER=ai and an API key is set. Without a key the rule engine is used. */
+  aiEmojiConfigured: boolean;
 };
 
 const cache = new WeakMap<object, AppConfig>();
@@ -118,6 +128,7 @@ export function loadConfig(env: Bindings): AppConfig {
     // Secure cookies everywhere except plain-http local development.
     cookieSecure: c.APP_ENV === 'production' || c.APP_ENV === 'staging' || c.API_BASE_URL.startsWith('https://'),
     googleOAuthConfigured: Boolean(c.GOOGLE_CLIENT_ID && c.GOOGLE_CLIENT_SECRET),
+    aiEmojiConfigured: c.EMOJI_PROVIDER === 'ai' && Boolean(c.ANTHROPIC_API_KEY),
   };
   cache.set(env, cfg);
   return cfg;

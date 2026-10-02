@@ -4,11 +4,12 @@ import { createLogger } from './lib/logger';
 import { DevPaymentProvider, NoPaymentProvider } from './modules/billing/provider';
 import { R2AssetStore } from './modules/dictionary/asset-store';
 import { DevEmailProvider, DisabledEmailProvider } from './modules/email/provider';
+import { createEmojiEngine } from './modules/emoji/ai-engine';
 import { RuleBasedEmojiEngine } from './modules/emoji/engine';
 import { createSignProvider } from './modules/sign/provider';
 import { CloudflareJobQueue } from './modules/sign/queue';
 
-const emojiEngine = new RuleBasedEmojiEngine();
+const ruleEngine = new RuleBasedEmojiEngine();
 let devEmail: DevEmailProvider | undefined;
 
 /** Builds the dependency container from Worker bindings. Tests pass overrides. */
@@ -29,7 +30,9 @@ export function buildServices(env: Bindings, overrides: Partial<Services> = {}):
       overrides.payment ??
       (config.PAYMENT_PROVIDER === 'dev' ? new DevPaymentProvider(config.DEV_PAYMENT_WEBHOOK_SECRET!, config.APP_BASE_URL) : new NoPaymentProvider()),
     signProvider: overrides.signProvider ?? createSignProvider(base),
-    emojiEngine: overrides.emojiEngine ?? emojiEngine,
+    emojiEngine:
+      overrides.emojiEngine ??
+      createEmojiEngine({ enabled: config.aiEmojiConfigured, apiKey: config.ANTHROPIC_API_KEY, model: config.AI_MODEL, fallback: ruleEngine, logger }),
     jobQueue: overrides.jobQueue !== undefined ? overrides.jobQueue : env.SIGN_JOBS_QUEUE ? new CloudflareJobQueue(env.SIGN_JOBS_QUEUE) : null,
     assetStore: overrides.assetStore !== undefined ? overrides.assetStore : env.ASSETS_BUCKET ? new R2AssetStore(env.ASSETS_BUCKET) : null,
   };

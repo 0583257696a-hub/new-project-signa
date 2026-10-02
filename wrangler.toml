@@ -7,7 +7,8 @@
 # Secrets are NOT stored here. Set them in the dashboard (Worker → Settings → Variables
 # and Secrets) or with `wrangler secret put <NAME> [--env <env>]`:
 #   APP_SECRET (required, ≥ 32 random chars), DEV_PAYMENT_WEBHOOK_SECRET (dev payments only),
-#   SIGN_PROVIDER_API_KEY (http sign provider), GOOGLE_CLIENT_SECRET (optional OAuth).
+#   SIGN_PROVIDER_API_KEY (http sign provider), GOOGLE_CLIENT_SECRET (optional OAuth),
+#   ANTHROPIC_API_KEY (AI emoji engine; without it the rule engine is used).
 # For local development copy .dev.vars.example to .dev.vars.
 
 name = "signa-api" # must match the Worker in the Cloudflare dashboard
@@ -37,6 +38,10 @@ APP_BASE_URL = "https://signa-api.abd-digital.workers.dev"
 API_BASE_URL = "https://signa-api.abd-digital.workers.dev"
 CORS_ALLOWED_ORIGINS = "https://signa-api.abd-digital.workers.dev"
 LOG_LEVEL = "info"
+# AI emoji translation (Claude). Active only once the ANTHROPIC_API_KEY secret is set,
+# and only for requests where the user allowed it; otherwise the rule engine is used.
+EMOJI_PROVIDER = "ai"
+AI_MODEL = "claude-opus-5-5"
 # Delivery stays disabled until a real provider adapter is implemented and configured.
 EMAIL_PROVIDER = "disabled"
 # No payment provider selected yet: checkout returns `provider_not_configured`.

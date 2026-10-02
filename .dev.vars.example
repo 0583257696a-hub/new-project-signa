@@ -3,3 +3,5 @@ APP_SECRET=replace-with-at-least-32-random-characters-xxxxxxxx
 DEV_PAYMENT_WEBHOOK_SECRET=replace-with-a-random-dev-webhook-secret
 # GOOGLE_CLIENT_ID=
 # GOOGLE_CLIENT_SECRET=
+# EMOJI_PROVIDER=ai
+# ANTHROPIC_API_KEY=

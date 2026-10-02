@@ -20,6 +20,8 @@ const TranslateSchema = z.object({
   language: z.enum(['he', 'en', 'auto']).default('auto'),
   /** "Regenerate" support: picks deterministic alternatives. */
   variant: z.number().int().min(0).max(9).default(0),
+  /** Explicit per-request consent to process the text with the external AI provider (Anthropic). */
+  allowExternalAi: z.boolean().default(false),
 });
 
 export const emojiRoutes = new Hono<AppEnv>();
@@ -54,7 +56,7 @@ emojiRoutes.post('/translate', async (c) => {
 
   let out;
   try {
-    out = await svc.emojiEngine.translate({ text, mode: input.mode, style: input.style, language: input.language, variant: input.variant });
+    out = await svc.emojiEngine.translate({ text, mode: input.mode, style: input.style, language: input.language, variant: input.variant, allowExternalAi: input.allowExternalAi });
   } catch {
     if (!reservation.replay) await releaseUsage(svc, reservation.eventId, 'engine_error');
     throw new AppError('provider_error');
@@ -82,13 +84,14 @@ emojiRoutes.post('/translate', async (c) => {
       variant: input.variant,
     },
     {
-      provider: svc.emojiEngine.name,
-      engineVersion: svc.emojiEngine.version,
-      method: 'deterministic_rules',
+      provider: out.engine?.name ?? svc.emojiEngine.name,
+      engineVersion: out.engine?.version ?? svc.emojiEngine.version,
+      method: out.method ?? 'deterministic_rules',
+      aiAvailable: svc.config.aiEmojiConfigured,
       usageCounted,
       idempotentReplay: reservation.replay,
       matchedConcepts: out.matchedConcepts,
-      coverage: out.coverage,
+      coverage: out.method === 'ai' ? null : out.coverage,
       noMatch: out.emojis.length === 0,
     },
   );

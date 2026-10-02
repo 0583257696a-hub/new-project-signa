@@ -11,6 +11,8 @@ export interface EmojiTranslationInput {
   language: EmojiLanguage | 'auto';
   /** Deterministic alternative selection for "regenerate" (0 = default). */
   variant: number;
+  /** The user allowed sending this text to an external AI provider for this request. */
+  allowExternalAi?: boolean;
 }
 
 export interface EmojiTranslationOutput {
@@ -23,9 +25,13 @@ export interface EmojiTranslationOutput {
   matchedConcepts: number;
   /** Share of words that matched a lexicon concept (0..1). Not a measure of semantic accuracy. */
   coverage: number;
+  /** How the output was produced (absent = deterministic rules). */
+  method?: 'ai' | 'deterministic_rules';
+  /** The engine that actually produced the output (an AI engine may fall back to rules). */
+  engine?: { name: string; version: string };
 }
 
-/** Replaceable engine contract (rule-based now; an AI-backed engine could implement it later). */
+/** Replaceable engine contract (rule-based, or AI-backed with a rule-based fallback). */
 export interface EmojiEngine {
   readonly name: string;
   readonly version: string;

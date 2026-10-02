@@ -19,6 +19,7 @@
     "node": ">=22.5"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "hono": "^4.13.12",
     "zod": "^4.6.5"
   },

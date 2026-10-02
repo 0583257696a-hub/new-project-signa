@@ -16,7 +16,7 @@ Signa is **privacy-first**: translation text is processed and forgotten by defau
 Translation text (except opt-in saved items and the minutes-long ephemeral job input), plaintext passwords, raw tokens, payment card data, full request bodies, IP addresses (rate limiting uses keyed HMACs in short-lived rows).
 
 ### Never sent to third parties
-Source text goes to an external service **only** if an operator configures `SIGN_PROVIDER=http` with an engine whose data handling has been reviewed. The emoji engine runs entirely inside the Worker. Emails never contain translation text.
+Source text goes to an external service **only** if an operator configures `SIGN_PROVIDER=http` with an engine whose data handling has been reviewed. Emoji text goes to Anthropic (Claude API) **only** when the operator enabled it (`EMOJI_PROVIDER=ai` plus the `ANTHROPIC_API_KEY` secret) **and** the request explicitly allows it (`allowExternalAi: true`, a visible toggle with a disclosure in the web app). Without both, the rule-based engine runs entirely inside the Worker. Signa never stores or logs that text. Emails never contain translation text.
 
 ## Saved history: opt-in rules
 1. Off by default (`users.history_enabled = 0`).

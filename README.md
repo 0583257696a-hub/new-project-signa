@@ -3,11 +3,11 @@
 Backend for **Signa**, a bilingual (Hebrew / English) SaaS that turns free text into:
 
 1. **Israeli Sign Language (ISL)** output for a 3D avatar, built only from expert-approved dictionary entries and licensed animation assets.
-2. **Emoji translations**: emoji-only output, or the original text with emojis added.
+2. **Emoji translations**: emoji-only output, or the original text with emojis added, by Claude (AI, opt-in per request) with a deterministic rule engine as fallback.
 
 It runs on **Cloudflare Workers** with **Hono**, **D1** (SQLite), **R2**, **Queues** and **Cron Triggers**, written in strict TypeScript and validated with Zod.
 
-> **Status.** All modules described below are implemented and covered by automated tests (92 tests),
+> **Status.** All modules described below are implemented and covered by automated tests (102 tests),
 > and were smoke-tested end-to-end on the real Workers runtime (`wrangler dev`, local D1 and Queues).
 > It has **not** been deployed to a Cloudflare account. No real payment provider, email provider or
 > validated ISL translation engine is connected yet. Those sit behind interfaces, with safe defaults (see [What remains](#what-remains)).
@@ -32,7 +32,7 @@ npm install
 cp .dev.vars.example .dev.vars          # set APP_SECRET (≥ 32 chars)
 npm run db:migrate:local                # apply D1 migrations locally
 npm run dev                             # http://localhost:8787
-npm test                                # 92 unit + integration tests
+npm test                                # 102 unit + integration tests
 npm run typecheck
 ```
 
@@ -53,6 +53,7 @@ npm run typecheck
 These items need decisions, credentials or external work and are **not** done:
 
 - **Payment provider.** Only `PaymentProvider` plus a dev adapter exist. Pick a provider, implement its adapter (checkout, webhook signature verification, status lookup) and set real prices. Prices are intentionally `null` ("to be announced").
+- **AI emoji engine key.** Set the `ANTHROPIC_API_KEY` secret on the Worker to turn on AI emoji translation; until then the rule engine answers every request.
 - **Email provider.** Only `EmailProvider` plus a dev in-memory adapter exist. Production delivery stays disabled until a real adapter is added.
 - **ISL translation engine.** The default `dictionary_lookup` adapter is an experimental, illustrative lookup over approved entries. It is **not** ISL grammar, and its output is always labelled `experimental`. A linguistically validated engine can be plugged in through `SignTranslationProvider` / `SIGN_PROVIDER=http`.
 - **Dictionary content and animation assets.** The dictionary starts with 475 *candidate concepts* and no signs. Entries need ISL expert review and confirmed licences before publication (see `docs/DICTIONARY.md`).

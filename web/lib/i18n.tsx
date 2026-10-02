@@ -82,6 +82,9 @@ const en = {
     planOnly: 'Available on Pro and Business',
     saveToHistory: 'Save to history',
     saved: 'Saved to history',
+    aiToggle: 'Smart AI translation',
+    aiNote: 'When on, the text is sent to our AI provider (Anthropic) to choose emojis by context. Signa does not store it.',
+    aiBadge: 'AI',
     idle: 'Type a message, pick a style and press “Translate message”.',
   },
   history: {
@@ -229,6 +232,9 @@ const he: Dict = {
     planOnly: 'זמין בתוכניות מקצועי ועסקי',
     saveToHistory: 'שמירה בהיסטוריה',
     saved: 'נשמר בהיסטוריה',
+    aiToggle: 'תרגום חכם עם AI',
+    aiNote: 'כשהאפשרות פעילה, הטקסט נשלח לספק ה-AI שלנו (Anthropic) כדי לבחור אימוג׳ים לפי ההקשר. Signa לא שומרת אותו.',
+    aiBadge: 'AI',
     idle: 'הקלידו הודעה, בחרו סגנון ולחצו „תרגום ההודעה”.',
   },
   history: {

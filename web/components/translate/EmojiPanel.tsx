@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, Pencil, RefreshCw, Share } from 'lucide-react';
+import { Copy, Pencil, RefreshCw, Share, Sparkles } from 'lucide-react';
 import { api, ApiError, newIdempotencyKey } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useSession } from '@/lib/session';
@@ -14,7 +14,7 @@ export type EmojiStyle = 'minimal' | 'standard' | 'expressive';
 type Phase =
   | { kind: 'idle' }
   | { kind: 'loading' }
-  | { kind: 'done'; result: EmojiResult; noMatch: boolean }
+  | { kind: 'done'; result: EmojiResult; noMatch: boolean; ai: boolean }
   | { kind: 'error' }
   | { kind: 'limit'; limit: number; resetsAt: string | null };
 
@@ -43,6 +43,28 @@ export function EmojiPanel({
   const [view, setView] = useState<'emoji_only' | 'text_and_emoji'>('text_and_emoji');
   const [toast, setToast] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [useAi, setUseAi] = useState(true);
+  const aiRef = useRef(true);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem('signa.emojiAi');
+      if (v !== null) {
+        aiRef.current = v === '1';
+        setUseAi(aiRef.current);
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+  const toggleAi = (on: boolean) => {
+    aiRef.current = on;
+    setUseAi(on);
+    try {
+      localStorage.setItem('signa.emojiAi', on ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+  };
   const last = useRef<{ text: string; style: EmojiStyle; variant: number }>({ text: '', style: 'standard', variant: 0 });
 
   const translate = useCallback(async (source: string, st: EmojiStyle, variant: number) => {
@@ -54,10 +76,10 @@ export function EmojiPanel({
     try {
       const { data, meta } = await api<EmojiResult>('/emoji/translate', {
         method: 'POST',
-        body: { text: source, mode: 'text_and_emoji', style: st, language: 'auto', variant },
+        body: { text: source, mode: 'text_and_emoji', style: st, language: 'auto', variant, allowExternalAi: aiRef.current },
         headers: { 'idempotency-key': newIdempotencyKey() },
       });
-      setPhase({ kind: 'done', result: data, noMatch: Boolean(meta.noMatch) });
+      setPhase({ kind: 'done', result: data, noMatch: Boolean(meta.noMatch), ai: meta.method === 'ai' });
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.code === 'quota_exceeded') {
@@ -125,6 +147,15 @@ export function EmojiPanel({
         />
       </div>
 
+      <label className="row small" style={{ gap: 8, alignItems: 'flex-start' }}>
+        <input type="checkbox" checked={useAi} onChange={(e) => toggleAi(e.target.checked)} style={{ marginTop: 3 }} />
+        <span>
+          <strong><Sparkles size={14} aria-hidden /> {t.emoji.aiToggle}</strong>
+          <br />
+          <span className="muted">{t.emoji.aiNote}</span>
+        </span>
+      </label>
+
       {phase.kind === 'idle' && <p className="muted" style={{ margin: 0 }}>{t.emoji.idle}</p>}
       {phase.kind === 'loading' && <div className="skeleton" style={{ height: 120 }} />}
       {phase.kind === 'error' && <ServiceErrorState onRetry={() => void translate(last.current.text, last.current.style, last.current.variant)} />}
@@ -139,7 +170,7 @@ export function EmojiPanel({
               <div className="preview-area">
                 <div className="bubble" dir="auto">
                   {shown}
-                  <small>{t.emoji.preview}</small>
+                  <small>{t.emoji.preview}{phase.ai && <> · <Sparkles size={12} aria-hidden /> {t.emoji.aiBadge}</>}</small>
                 </div>
               </div>
               <div className="stack" style={{ gap: 6 }}>
