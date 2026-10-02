@@ -21,7 +21,8 @@ import { buildServices } from './services';
  * services are built from Worker bindings.
  */
 export function createApp(overrides: Partial<Services> = {}) {
-  const app = new Hono<AppEnv>();
+  // strict: false — '/health/' and '/health' are the same route (browsers often add a trailing slash).
+  const app = new Hono<AppEnv>({ strict: false });
 
   // Liveness and the service banner must answer even when configuration is broken,
   // so they are registered before the services container is built.

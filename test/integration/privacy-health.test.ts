@@ -94,6 +94,8 @@ describe('health, errors & maintenance', () => {
     const ready = await h.app.request('/ready', {}, h.env);
     expect(ready.status).toBe(200);
     expect(await ready.json()).toEqual({ status: 'ready', checks: { configuration: 'ok', database: 'ok', storage: 'ok', queue: 'ok' } });
+    expect((await h.app.request('/health/', {}, h.env)).status).toBe(200);
+    expect((await h.app.request('/api/v1/plans/', {}, h.env)).status).toBe(200);
     const root = await h.app.request('/', {}, h.env);
     expect(await root.json()).toMatchObject({ service: 'signa-api', status: 'ok' });
   });
