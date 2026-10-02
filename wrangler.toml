@@ -46,30 +46,29 @@ SIGN_PROVIDER_VALIDATED = "false"
 SIGN_SYNC_FALLBACK_MAX_CHARS = "280"
 SIGN_RESULT_TTL_SECONDS = "3600"
 
+# Production resources that exist in the Cloudflare account (attached to the signa-api Worker).
 [[d1_databases]]
 binding = "DB"
-database_name = "signa-db-production"
-database_id = "777cd7ee-633d-49f7-b9b5-1f1652fe92bf"
+database_name = "signa-db"
+database_id = "a19458fd-f2ab-48c0-ad9c-fd4c185eaf39"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
 binding = "ASSETS_BUCKET"
-bucket_name = "signa-assets-production"
+bucket_name = "signa-assets"
 
 [[queues.producers]]
 binding = "SIGN_JOBS_QUEUE"
-queue = "signa-sign-jobs-production"
+queue = "signa-sign-jobs"
 
+# Bounded retries; jobs that still fail are expired by the cron sweeper (10-minute deadline).
+# To add a dead-letter queue: `wrangler queues create signa-sign-jobs-dlq`, then set
+# dead_letter_queue below and add a consumer for it.
 [[queues.consumers]]
-queue = "signa-sign-jobs-production"
+queue = "signa-sign-jobs"
 max_batch_size = 10
 max_batch_timeout = 2
 max_retries = 3
-dead_letter_queue = "signa-sign-jobs-production-dlq"
-
-[[queues.consumers]]
-queue = "signa-sign-jobs-production-dlq"
-max_retries = 1
 
 [triggers]
 crons = ["*/10 * * * *"]

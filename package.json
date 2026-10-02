@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate:local": "wrangler d1 migrations apply signa-db --local --env dev",
-    "db:migrate:remote": "wrangler d1 migrations apply signa-db-production --remote",
+    "db:migrate:remote": "wrangler d1 migrations apply signa-db --remote",
     "cf-typegen": "wrangler types"
   },
   "engines": {

@@ -7,7 +7,7 @@
 
 ## 2. Create resources (per environment)
 ```bash
-npx wrangler d1 create signa-db-production          # copy database_id into wrangler.toml [env.production]
+npx wrangler d1 create signa-db                     # copy database_id into the top-level [[d1_databases]] in wrangler.toml
 npx wrangler r2 bucket create signa-assets-production
 npx wrangler queues create signa-sign-jobs-production
 npx wrangler queues create signa-sign-jobs-production-dlq
@@ -49,14 +49,14 @@ Worker **`signa-api`** → Settings → Build:
 | Deploy command | `npx wrangler deploy` (the default) or `npm run deploy` |
 | Root directory | `/` |
 
-The **top-level** configuration in `wrangler.toml` is production (`name = "signa-api"`, which must match the Worker name in the dashboard); local development is `--env dev`. The build step (`scripts/build.mjs`) builds the web app and, only on Workers Builds (`WORKERS_CI=1`), applies pending D1 migrations to `signa-db-production` before upload — the build token needs D1 edit permission. Secrets such as `APP_SECRET` are set under Worker → Settings → Variables and Secrets (type **Secret**). Every push to `main` builds, applies pending migrations and deploys.
+The **top-level** configuration in `wrangler.toml` is production (`name = "signa-api"`, which must match the Worker name in the dashboard); local development is `--env dev`. The build step (`scripts/build.mjs`) builds the web app and, only on Workers Builds (`WORKERS_CI=1`), applies pending D1 migrations to the production database `signa-db` before upload — the build token needs D1 edit permission. Secrets such as `APP_SECRET` are set under Worker → Settings → Variables and Secrets (type **Secret**). Every push to `main` builds, applies pending migrations and deploys.
 
 Temporary address: `https://signa-api.abd-digital.workers.dev` (`/health`, `/ready`, `/api/v1`). A newly created `workers.dev` subdomain can return `NXDOMAIN` from some resolvers for a while (cached negative answers), even though it resolves globally.
 
 ### Option B: from a terminal
 ```bash
 npm ci && npm run typecheck && npm test
-npx wrangler d1 migrations apply signa-db-production --remote
+npx wrangler d1 migrations apply signa-db --remote
 npx wrangler deploy
 curl https://api.signa.example/health && curl https://api.signa.example/ready
 ```
@@ -65,7 +65,7 @@ Migrations are forward-only, version-controlled SQL in `migrations/`. Wrangler t
 ## 5. Bootstrap the first superadmin
 There is deliberately no API to self-promote. After the operator registers through the app:
 ```bash
-npx wrangler d1 execute signa-db-production --remote --env production \
+npx wrangler d1 execute signa-db --remote \
   --command "UPDATE users SET platform_role = 'superadmin' WHERE email_normalized = 'ops@your-domain'"
 ```
 

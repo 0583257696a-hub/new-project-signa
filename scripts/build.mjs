@@ -10,6 +10,6 @@ const run = (cmd) => execSync(cmd, { stdio: 'inherit' });
 run('npm --prefix web ci && npm --prefix web run build');
 
 if (process.env.WORKERS_CI === '1' && !process.env.CLOUDFLARE_ENV) {
-  console.log('[build] Workers Builds detected: applying D1 migrations to signa-db-production');
-  run('npx wrangler d1 migrations apply signa-db-production --remote');
+  console.log('[build] Workers Builds detected: applying D1 migrations to signa-db');
+  run('npx wrangler d1 migrations apply signa-db --remote');
 }
